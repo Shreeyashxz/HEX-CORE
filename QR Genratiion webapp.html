@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Inventory Management System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        .form-input {
+            @apply w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400;
+            @apply focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200;
+            @apply transition-all duration-150;
+        }
+        .modal-enter {
+            opacity: 0;
+        }
+        .modal-enter-active {
+            opacity: 1;
+            transition: opacity 200ms;
+        }
+        .modal-leave {
+            opacity: 1;
+        }
+        .modal-leave-active {
+            opacity: 0;
+            transition: opacity 200ms;
+        }
+        .modal-content-enter {
+            transform: scale(0.95);
+        }
+        .modal-content-enter-active {
+            transform: scale(1);
+            transition: transform 200ms;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen font-sans text-slate-800">
+
+    <div id="app" class="p-4 sm:p-6 lg:p-8">
+        <div class="max-w-7xl mx-auto">
+            <!-- Header -->
+            <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Inventory Dashboard</h1>
+                    <p class="text-slate-600 mt-1">Manage and secure your fitting parts inventory.</p>
+                </div>
+                <button id="add-new-item-btn" class="mt-4 sm:mt-0 flex items-center gap-2 justify-center px-5 py-2.5 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-150 active:scale-[0.98]">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                    Add New Item
+                </button>
+            </header>
+
+            <!-- Controls -->
+            <div class="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+                <input type="search" id="inventory-search" placeholder="Search inventory..." class="form-input w-full sm:w-72 order-2 sm:order-1">
+                <div class="flex items-center border border-slate-300 rounded-md p-1 bg-slate-200 order-1 sm:order-2">
+                     <button id="view-card-btn" class="p-1.5 rounded-md transition-colors bg-white shadow-sm text-indigo-600" title="Card View">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                    </button>
+                    <button id="view-table-btn" class="p-1.5 rounded-md transition-colors text-slate-500 hover:bg-slate-300/50" title="Table View">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Inventory Display -->
+            <div id="inventory-display-container">
+                 <!-- JS will inject card grid or table here -->
+            </div>
+             <div id="inventory-placeholder" class="text-center py-20 text-slate-500 bg-white rounded-lg border border-slate-200" style="display: none;">
+                <h3 class="text-lg font-semibold text-slate-800">No Inventory Items Found</h3>
+                <p class="mt-1">Click "Add New Item" to get started.</p>
+            </div>
+        </div>
+
+        <!-- Modals Container -->
+        <div id="modals-container"></div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // --- App State ---
+        let inventory = [];
+        let encryptionKey = null;
+        let editingItem = null;
+        let viewMode = 'card';
+    
+        // --- DOM Elements ---
+        const addNewItemBtn = document.getElementById('add-new-item-btn');
+        const inventorySearch = document.getElementById('inventory-search');
+        const viewCardBtn = document.getElementById('view-card-btn');
+        const viewTableBtn = document.getElementById('view-table-btn');
+        const displayContainer = document.getElementById('inventory-display-container');
+        const placeholder = document.getElementById('inventory-placeholder');
+        const modalsContainer = document.getElementById('modals-container');
+
+        // --- Core Logic ---
+        const serializeData = (data) => {
+            const textEncoder = new TextEncoder();
+            const partIdBytes = textEncoder.encode(data.partId.substring(0, 36).padEnd(36, ' '));
+            const lotNumberBytes = textEncoder.encode(data.lotNumber);
+            const inspectionTimestamps = data.inspectionDates.map(d => new Date(d).getTime());
+            const bufferSize = 36 + 2 + 1 + lotNumberBytes.length + 8 + 8 + 2 + 1 + (inspectionTimestamps.length * 8);
+            const buffer = new ArrayBuffer(bufferSize);
+            const view = new DataView(buffer);
+            let offset = 0;
+            partIdBytes.forEach((byte, i) => view.setUint8(offset + i, byte)); offset += 36;
+            view.setUint16(offset, data.vendorId, false); offset += 2;
+            view.setUint8(offset, lotNumberBytes.length); offset += 1;
+            lotNumberBytes.forEach((byte, i) => view.setUint8(offset + i, byte)); offset += lotNumberBytes.length;
+            view.setFloat64(offset, data.dateOfSupply, false); offset += 8;
+            view.setFloat64(offset, data.expiryDate, false); offset += 8;
+            view.setUint16(offset, data.warrantyPeriod, false); offset += 2;
+            view.setUint8(offset, inspectionTimestamps.length); offset += 1;
+            inspectionTimestamps.forEach(ts => { view.setFloat64(offset, ts, false); offset += 8; });
+            return new Uint8Array(buffer);
+        };
+        
+        const encryptData = async (key, data) => {
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encryptedData = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
+            return { iv, encryptedData };
+        };
+
+        const getExpiryStatus = (expiryDate) => {
+            const now = new Date(); now.setHours(0, 0, 0, 0);
+            const expiry = new Date(expiryDate);
+            const warningDate = new Date(); warningDate.setDate(now.getDate() + 30);
+            if (expiry < now) return { text: 'Expired', className: 'bg-red-100 text-red-800' };
+            if (expiry <= warningDate) return { text: 'Expires Soon', className: 'bg-orange-100 text-orange-800' };
+            return { text: 'Valid', className: 'bg-green-100 text-green-800' };
+        };
+
+        // --- UI Rendering ---
+        const render = () => {
+            const searchTerm = inventorySearch.value.toLowerCase();
+            const filteredInventory = inventory.filter(item => {
+                const supplyDate = new Date(item.dateOfSupply);
+                const expiryDate = new Date(item.expiryDate);
+                const searchableString = [
+                    item.partId,
+                    item.lotNumber,
+                    item.vendorId,
+                    item.warrantyPeriod,
+                    item.qrLevel,
+                    supplyDate.toLocaleDateString(),
+                    supplyDate.toISOString().split('T')[0],
+                    expiryDate.toLocaleDateString(),
+                    expiryDate.toISOString().split('T')[0]
+                ].join(' ').toLowerCase();
+                return searchableString.includes(searchTerm);
+            });
+
+            displayContainer.innerHTML = '';
+            placeholder.style.display = 'none';
+
+            if (filteredInventory.length === 0) {
+                placeholder.style.display = 'block';
+                return;
+            }
+
+            if (viewMode === 'card') {
+                const cardGrid = document.createElement('div');
+                cardGrid.className = "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6";
+                filteredInventory.forEach(item => {
+                    const status = getExpiryStatus(item.expiryDate);
+                    const card = document.createElement('div');
+                    card.className = "bg-white rounded-lg p-5 flex flex-col justify-between shadow-sm border border-slate-200 transition-all duration-200 hover:shadow-lg hover:-translate-y-1 hover:border-indigo-400";
+                    card.innerHTML = `
+                        <div>
+                            <div class="flex justify-between items-start gap-4">
+                                <p class="font-mono text-xs font-semibold text-slate-800 break-all">${item.partId}</p>
+                                <span class="flex-shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${status.className}">${status.text}</span>
+                            </div>
+                            <div class="mt-3 text-sm space-y-1.5 border-t pt-3">
+                                <p class="text-slate-600"><span class="font-medium text-slate-900">Lot:</span> ${item.lotNumber}</p>
+                                <p class="text-slate-600"><span class="font-medium text-slate-900">Vendor:</span> ${item.vendorId}</p>
+                                <p class="text-slate-600"><span class="font-medium text-slate-900">Warranty:</span> ${item.warrantyPeriod} months</p>
+                                <p class="text-slate-600"><span class="font-medium text-slate-900">Supplied:</span> ${new Date(item.dateOfSupply).toLocaleDateString()}</p>
+                            </div>
+                        </div>
+                        <div class="mt-4 pt-3 flex justify-end items-center gap-2 border-t border-slate-200">
+                            <button data-action="show-qr" data-part-id="${item.partId}" title="Show QR Code" class="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none"><rect x="3" y="3" width="7" height="7"></rect><polyline points="17 3 21 3 21 7"></polyline><polyline points="21 17 21 21 17 21"></polyline><polyline points="7 21 3 21 3 17"></polyline><rect x="17" y="17" width="1" height="1"></rect><line x1="10" y1="17" x2="10" y2="21"></line><line x1="10" y1="3" x2="10" y2="7"></line><line x1="17" y1="10" x2="21" y2="10"></line><line x1="3" y1="10" x2="7" y2="10"></line><rect x="7" y="7" width="10" height="10"></rect></svg></button>
+                            <button data-action="edit" data-part-id="${item.partId}" title="Edit Item" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                            <button data-action="delete" data-part-id="${item.partId}" title="Delete Item" class="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+                        </div>
+                    `;
+                    cardGrid.appendChild(card);
+                });
+                displayContainer.appendChild(cardGrid);
+            } else { // Table View
+                const tableContainer = document.createElement('div');
+                tableContainer.className = "overflow-x-auto bg-white rounded-lg border shadow-sm";
+                const table = document.createElement('table');
+                table.className = "w-full text-sm text-left";
+                table.innerHTML = `
+                    <thead class="text-xs text-slate-600 uppercase bg-slate-50">
+                        <tr>
+                            <th class="px-6 py-4 font-semibold">Part Details</th>
+                            <th class="px-6 py-4 font-semibold">Dates</th>
+                            <th class="px-6 py-4 font-semibold">Status</th>
+                            <th class="px-6 py-4 font-semibold text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200">
+                    ${filteredInventory.map(item => {
+                        const status = getExpiryStatus(item.expiryDate);
+                        return `
+                            <tr class="hover:bg-slate-50/70 transition-colors duration-150">
+                                <td class="px-6 py-4"><div class="font-mono text-xs font-semibold text-slate-800">${item.partId.substring(0,8)}...</div><div class="text-slate-500 text-xs">Lot: ${item.lotNumber}</div></td>
+                                <td class="px-6 py-4 text-xs"><div class="font-medium text-slate-700">Supp: ${new Date(item.dateOfSupply).toLocaleDateString()}</div><div class="text-slate-500">Exp: ${new Date(item.expiryDate).toLocaleDateString()}</div></td>
+                                <td class="px-6 py-4"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${status.className}">${status.text}</span></td>
+                                <td class="px-6 py-4">
+                                    <div class="flex justify-center items-center space-x-1">
+                                        <button data-action="show-qr" data-part-id="${item.partId}" title="Show QR Code" class="p-2 text-slate-500 hover:text-indigo-600 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none"><rect x="3" y="3" width="7" height="7"></rect><polyline points="17 3 21 3 21 7"></polyline><polyline points="21 17 21 21 17 21"></polyline><polyline points="7 21 3 21 3 17"></polyline><rect x="17" y="17" width="1" height="1"></rect><line x1="10" y1="17" x2="10" y2="21"></line><line x1="10" y1="3" x2="10" y2="7"></line><line x1="17" y1="10" x2="21" y2="10"></line><line x1="3" y1="10" x2="7" y2="10"></line><rect x="7" y="7" width="10" height="10"></rect></svg></button>
+                                        <button data-action="edit" data-part-id="${item.partId}" title="Edit Item" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                                        <button data-action="delete" data-part-id="${item.partId}" title="Delete Item" class="p-2 text-slate-500 hover:text-red-600 hover:bg-slate-100 rounded-full transition-colors"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="pointer-events-none"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('')}
+                    </tbody>
+                `;
+                tableContainer.appendChild(table);
+                displayContainer.appendChild(tableContainer);
+            }
+        };
+
+        // --- Modal Logic ---
+        const openModal = (modalHTML) => {
+            modalsContainer.innerHTML = modalHTML;
+            setTimeout(() => {
+                const modalBg = modalsContainer.querySelector('.modal-bg');
+                const modalContent = modalsContainer.querySelector('.modal-content');
+                if (modalBg) modalBg.classList.add('modal-enter-active');
+                if (modalContent) modalContent.classList.add('modal-content-enter-active');
+            }, 10);
+        };
+
+        const closeModal = () => {
+            const modalBg = modalsContainer.querySelector('.modal-bg');
+            if (modalBg) {
+                const modalContent = modalBg.querySelector('.modal-content');
+                modalBg.classList.remove('modal-enter-active');
+                if (modalContent) modalContent.classList.remove('modal-content-enter-active');
+                setTimeout(() => {
+                    modalsContainer.innerHTML = '';
+                }, 200);
+            }
+        };
+        
+        const showItemFormModal = (item) => {
+            editingItem = item;
+            const modalHTML = `
+                <div class="fixed inset-0 bg-black/60 z-50 flex justify-center items-center p-4 modal-bg modal-enter" data-action="close-modal">
+                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg relative modal-content modal-content-enter">
+                        <div class="p-6 border-b">
+                            <h2 class="text-xl font-bold text-slate-900">${item ? 'Edit Item' : 'Add New Item'}</h2>
+                            ${item ? `<p class="font-mono text-xs text-slate-500 mt-1">${item.partId}</p>` : ''}
+                        </div>
+                        <form id="item-form" class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <input name="vendorId" type="number" placeholder="Vendor ID" value="${item?.vendorId || ''}" required class="form-input" />
+                                <input name="lotNumber" type="text" placeholder="Lot Number" value="${item?.lotNumber || ''}" required class="form-input" />
+                            </div>
+                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <input name="dateOfSupply" type="date" title="Date of Supply" value="${item ? new Date(item.dateOfSupply).toISOString().split('T')[0] : ''}" required class="form-input" />
+                                <input name="expiryDate" type="date" title="Expiry Date" value="${item ? new Date(item.expiryDate).toISOString().split('T')[0] : ''}" required class="form-input" />
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <input name="warrantyPeriod" type="number" placeholder="Warranty Period (Months)" value="${item?.warrantyPeriod || ''}" required class="form-input" />
+                                <div>
+                                    <select name="qrLevel" class="form-input">
+                                        <option value="L" ${item?.qrLevel === 'L' ? 'selected' : ''}>QR Level L (Low)</option>
+                                        <option value="M" ${item?.qrLevel === 'M' ? 'selected' : ''}>QR Level M (Medium)</option>
+                                        <option value="Q" ${item?.qrLevel === 'Q' ? 'selected' : ''}>QR Level Q (Quartile)</option>
+                                        <option value="H" ${!item || item?.qrLevel === 'H' ? 'selected' : ''}>QR Level H (High)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </form>
+                        <div class="p-6 bg-slate-50 rounded-b-xl flex justify-end gap-3">
+                            <button data-action="close-modal" class="px-4 py-2 text-sm font-semibold text-slate-700 bg-white border rounded-md hover:bg-slate-50">Cancel</button>
+                            <button type="submit" form="item-form" class="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md hover:bg-indigo-700">Save Item</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            openModal(modalHTML);
+        };
+
+        const showQRCodeModal = async (item) => {
+            if (!encryptionKey) { alert("Encryption key is not available."); return; }
+            const binaryData = serializeData(item);
+            const { iv, encryptedData } = await encryptData(encryptionKey, binaryData);
+            const finalPayload = new Uint8Array(iv.length + new Uint8Array(encryptedData).length);
+            finalPayload.set(iv, 0);
+            finalPayload.set(new Uint8Array(encryptedData), iv.length);
+            const qrString = String.fromCharCode.apply(null, finalPayload);
+            
+            const modalHTML = `
+                <div class="fixed inset-0 bg-black/60 z-50 flex justify-center items-center p-4 modal-bg modal-enter" data-action="close-modal">
+                    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md relative p-6 text-center modal-content modal-content-enter">
+                        <h3 class="text-lg font-bold">QR Code for Item</h3>
+                        <p class="font-mono text-xs text-slate-500 mt-1 break-all">${item.partId}</p>
+                        <div class="my-6 flex justify-center">
+                            <canvas id="qr-canvas-modal"></canvas>
+                        </div>
+                        <button data-action="close-modal" class="px-5 py-2 text-sm font-semibold text-white bg-slate-700 rounded-md hover:bg-slate-800">Close</button>
+                    </div>
+                </div>
+            `;
+            openModal(modalHTML);
+
+            setTimeout(() => { // ensure canvas is in the DOM
+                const canvas = document.getElementById('qr-canvas-modal');
+                if(canvas) new QRious({ element: canvas, value: qrString, size: 256, padding: 16, level: item.qrLevel || 'H' });
+            }, 50);
+        };
+        
+        // --- Event Delegation & Handlers ---
+        addNewItemBtn.addEventListener('click', () => showItemFormModal(null));
+        inventorySearch.addEventListener('input', render);
+
+        viewCardBtn.addEventListener('click', () => {
+            viewMode = 'card';
+            viewCardBtn.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
+            viewCardBtn.classList.remove('text-slate-500');
+            viewTableBtn.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
+            viewTableBtn.classList.add('text-slate-500');
+            render();
+        });
+        viewTableBtn.addEventListener('click', () => {
+            viewMode = 'table';
+            viewTableBtn.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
+            viewTableBtn.classList.remove('text-slate-500');
+            viewCardBtn.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
+            viewCardBtn.classList.add('text-slate-500');
+            render();
+        });
+
+        displayContainer.addEventListener('click', (e) => {
+            const target = e.target.closest('button');
+            if (!target) return;
+            
+            const action = target.dataset.action;
+            const partId = target.dataset.partId;
+            const item = inventory.find(i => i.partId === partId);
+            
+            if (action === 'edit' && item) showItemFormModal(item);
+            if (action === 'delete' && item) {
+                if(confirm('Are you sure you want to delete this item?')) {
+                    inventory = inventory.filter(i => i.partId !== partId);
+                    localStorage.setItem('inventory', JSON.stringify(inventory));
+                    render();
+                }
+            }
+            if (action === 'show-qr' && item) showQRCodeModal(item);
+        });
+
+        modalsContainer.addEventListener('click', (e) => {
+            if (e.target.dataset.action === 'close-modal') closeModal();
+        });
+
+        modalsContainer.addEventListener('submit', (e) => {
+            e.preventDefault();
+            if (e.target.id === 'item-form') {
+                const formData = new FormData(e.target);
+                const itemData = {
+                    vendorId: parseInt(formData.get('vendorId')),
+                    lotNumber: formData.get('lotNumber'),
+                    dateOfSupply: new Date(formData.get('dateOfSupply')).getTime(),
+                    expiryDate: new Date(formData.get('expiryDate')).getTime(),
+                    warrantyPeriod: parseInt(formData.get('warrantyPeriod')),
+                    qrLevel: formData.get('qrLevel'),
+                    inspectionDates: editingItem?.inspectionDates || [], 
+                };
+
+                if (editingItem) {
+                     inventory = inventory.map(item => item.partId === editingItem.partId ? { ...item, ...itemData, partId: item.partId } : item);
+                } else {
+                    const newItem = { ...itemData, partId: crypto.randomUUID() };
+                    inventory.unshift(newItem);
+                }
+                localStorage.setItem('inventory', JSON.stringify(inventory));
+                render();
+                closeModal();
+            }
+        });
+
+        // --- Initialization ---
+        const initialize = async () => {
+            try {
+                encryptionKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+            } catch (e) { console.error("Crypto key generation failed.", e); }
+            const storedInventory = localStorage.getItem('inventory');
+            if (storedInventory) inventory = JSON.parse(storedInventory);
+            render();
+        };
+
+        initialize();
+    });
+    </script>
+</body>
+</html>
+

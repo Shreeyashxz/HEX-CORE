@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionRail: AI Digital Twin Prototype</title>
+    <!-- Tailwind CSS for rapid UI development -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Babylon.js for 3D rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/5.53.1/babylon.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/5.53.1/loaders/babylonjs.loaders.min.js"></script>
+    <!-- Google Fonts for typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Basic styling for the application body */
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevents scrollbars on the main page */
+        }
+        /* Canvas element should fill its container */
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none; /* Disables touch events like pinch-to-zoom on the canvas */
+        }
+        /* Custom scrollbar for the info panels */
+        .info-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+        .info-panel::-webkit-scrollbar-thumb {
+            background-color: #4a5568;
+            border-radius: 20px;
+        }
+        /* Simple hover effect for buttons */
+        .focus-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .focus-btn:hover {
+            background-color: #0891b2; /* Cyan color on hover */
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200">
+
+    <!-- Main application container using Flexbox -->
+    <div id="app" class="flex h-screen w-screen">
+        
+        <!-- Main Content: 3D Viewer takes up the remaining space -->
+        <main class="flex-1 relative">
+            <!-- The canvas where the 3D scene will be rendered -->
+            <canvas id="renderCanvas"></canvas>
+            
+            <!-- Loading overlay shown during scene initialization -->
+            <div id="loading-overlay" class="absolute inset-0 bg-gray-900 bg-opacity-80 flex items-center justify-center z-20">
+                <div class="text-center">
+                    <div class="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-cyan-400 mx-auto"></div>
+                    <p class="mt-4 text-lg font-semibold">Initializing Digital Twin...</p>
+                    <p class="text-sm text-gray-400">Integrating sleeper & liner asset data.</p>
+                </div>
+            </div>
+
+            <!-- Header section positioned at the top-left -->
+            <div class="absolute top-0 left-0 p-4 bg-gray-900 bg-opacity-60 rounded-br-lg z-10">
+                <h1 class="text-2xl font-bold text-white">Vision<span class="text-cyan-400">Rail</span></h1>
+                <p class="text-sm text-gray-400">AI-Powered Predictive Maintenance</p>
+            </div>
+
+            <!-- Simulation Info display at the top-right -->
+            <div class="absolute top-4 right-4 p-3 bg-gray-900 bg-opacity-60 rounded-lg text-xs text-right z-10">
+                <p class="font-semibold">Kanpur, Uttar Pradesh</p>
+                <p class="text-gray-400">Saturday, October 4, 2025, 11:55 AM IST</p>
+            </div>
+
+            <!-- Camera Controls Info display at the bottom-left -->
+             <div class="absolute bottom-4 left-4 p-3 bg-gray-900 bg-opacity-60 rounded-lg text-xs text-gray-400 z-10">
+                <p>Controls: Left-click + Drag to Rotate | Right-click + Drag to Pan | Scroll to Zoom</p>
+            </div>
+        </main>
+
+        <!-- Right Sidebar for data and alerts, with a fixed width -->
+        <aside class="w-96 bg-gray-800/80 backdrop-blur-sm border-l border-gray-700 flex flex-col h-screen">
+            <!-- System Status section -->
+            <div class="p-4 border-b border-gray-700">
+                <h2 class="text-xl font-semibold">System Status</h2>
+                <div class="flex items-center mt-2">
+                    <span class="relative flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                    </span>
+                    <p id="status-text" class="ml-3 text-sm">TRC/ITMS Simulation: Active</p>
+                </div>
+            </div>
+            
+            <!-- Scrollable container for feeds -->
+            <div class="flex-1 overflow-y-auto info-panel p-4 space-y-6">
+                <!-- Live Defect Feed section -->
+                <div>
+                    <h3 class="font-semibold text-lg mb-2 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2 text-red-400"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                        Live Defect Feed
+                    </h3>
+                    <div id="defect-feed" class="space-y-3 max-h-80 overflow-y-auto info-panel pr-2">
+                         <p class="text-gray-500 text-sm text-center py-4">Awaiting first defect detection...</p>
+                    </div>
+                </div>
+
+                <!-- Predictive Maintenance Alerts section -->
+                <div>
+                    <h3 class="font-semibold text-lg mb-2 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 mr-2 text-yellow-400"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                        Predictive Maintenance Alerts
+                    </h3>
+                    <div id="alert-feed" class="space-y-3">
+                        <p class="text-gray-500 text-sm text-center py-4">No predictive alerts generated.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer section -->
+            <div class="p-4 border-t border-gray-700 text-xs text-gray-500">
+                <p>&copy; 2025 VisionRail Prototype. For demonstration purposes only.</p>
+                <p>Data is simulated based on the VisionRail framework.</p>
+            </div>
+        </aside>
+
+    </div>
+
+    <script>
+        // Wait for the DOM to be fully loaded before initializing the 3D scene
+        document.addEventListener('DOMContentLoaded', () => {
+            // Get references to HTML elements
+            const canvas = document.getElementById('renderCanvas');
+            const loadingOverlay = document.getElementById('loading-overlay');
+            // Initialize the Babylon.js engine
+            const engine = new BABYLON.Engine(canvas, true);
+
+            // --- Configuration Constants ---
+            const NUM_SLEEPERS = 250;                    // Total number of sleepers to generate, defining the track length
+            const SLEEPER_SPACING = 0.6;                 // Distance between each sleeper in meters
+            const RAIL_GAUGE = 1.676;                    // Broad gauge for Indian Railways in meters
+            const SIMULATION_INTERVAL = 1800;            // Time in milliseconds between each simulated defect report
+            const PREDICTIVE_THRESHOLD = 3;              // Number of defects on a single asset to trigger a predictive alert
+            
+            // --- Global State Variables ---
+            let scene, camera;
+            const assets = {};                           // Object to store all track assets (meshes and data) by their ID
+            const defectHistory = {};                    // Object to log defect timestamps for each asset for predictive analysis
+            let liveDefects = [];                        // Array to hold the most recent defect reports for the UI
+            let predictiveAlerts = [];                   // Array to hold generated predictive alerts for the UI
+
+            // --- Core Functions ---
+
+            /**
+             * Smoothly animates the camera to focus on a specific asset.
+             * This function is exposed to the global window object so it can be called from onclick attributes in the HTML.
+             * @param {string} assetId - The ID of the asset to focus on.
+             */
+            window.focusOnAsset = (assetId) => {
+                const asset = assets[assetId];
+                if (asset && camera) {
+                    const targetPosition = asset.mesh.getAbsolutePosition();
+                    const frameRate = 30; // Animation frames per second
+
+                    // Create an animation for the camera's target (the point it looks at)
+                    const targetAnimation = new BABYLON.Animation("targetAnim", "target", frameRate, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+                    targetAnimation.setKeys([{ frame: 0, value: camera.target }, { frame: frameRate, value: targetPosition }]);
+                    
+                    // Create an animation for the camera's radius (its distance from the target) to zoom in
+                    const radiusAnimation = new BABYLON.Animation("radiusAnim", "radius", frameRate, BABYLON.Animation.ANIMATIONTYPE_FLOAT, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+                    radiusAnimation.setKeys([{ frame: 0, value: camera.radius }, { frame: frameRate, value: 5 }]); // Zoom in to 5 units
+                    
+                    // Combine and run the animations
+                    camera.animations = [targetAnimation, radiusAnimation];
+                    scene.beginAnimation(camera, 0, frameRate, false, 1.0, () => { camera.animations = []; }); // Clear animations after completion
+                }
+            };
+
+            /**
+             * Creates and configures the entire Babylon.js scene, including cameras, lights, and all 3D models.
+             * @returns {BABYLON.Scene} The fully constructed scene object.
+             */
+            const createScene = () => {
+                scene = new BABYLON.Scene(engine);
+                scene.clearColor = new BABYLON.Color3.FromHexString("#1a202c"); // Dark gray background
+
+                // Add fog for atmospheric effect
+                scene.fogMode = BABYLON.Scene.FOGMODE_LINEAR;
+                scene.fogColor = scene.clearColor;
+                scene.fogStart = 50; // Fog starts 50 units away
+                scene.fogEnd = 120; // Fog is fully opaque at 120 units
+
+                // Create and configure the main camera
+                const trackLength = NUM_SLEEPERS * SLEEPER_SPACING;
+                camera = new BABYLON.ArcRotateCamera("camera", -Math.PI / 2, Math.PI / 2.5, 25, new BABYLON.Vector3(0, 0, trackLength / 2));
+                camera.attachControl(canvas, true); // Allow user control
+                camera.wheelPrecision = 20; // Controls zoom sensitivity
+                camera.lowerRadiusLimit = 2; // How close you can zoom
+                camera.upperRadiusLimit = 100; // How far you can zoom out
+                camera.panningSensibility = 2000;
+
+                // Add a simple hemispheric light for overall ambient lighting
+                const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0.5, 1, 0.25), scene);
+                light.intensity = 0.8;
+                
+                // --- Material Definitions ---
+                // Create materials once to be reused by multiple meshes for better performance
+                const railMaterial = new BABYLON.StandardMaterial("railMat", scene);
+                railMaterial.diffuseColor = new BABYLON.Color3.FromHexString("#737373");
+                const sleeperMaterial = new BABYLON.StandardMaterial("sleeperMat", scene);
+                sleeperMaterial.diffuseColor = new BABYLON.Color3.FromHexString("#57534e");
+                const clipMaterial = new BABYLON.StandardMaterial("clipMat", scene);
+                clipMaterial.diffuseColor = new BABYLON.Color3.FromHexString("#a3a3a3");
+                const linerMaterial = new BABYLON.StandardMaterial("linerMat", scene);
+                linerMaterial.diffuseColor = new BABYLON.Color3.FromHexString("#3f3f46");
+                const ballastMaterial = new BABYLON.StandardMaterial("ballastMat", scene);
+                ballastMaterial.diffuseColor = new BABYLON.Color3.FromHexString("#44403c");
+                const oheMaterial = new BABYLON.StandardMaterial("oheMat", scene);
+                oheMaterial.diffuseColor = new BABYLON.Color3.FromHexString("#4d7c0f");
+
+                // --- Procedural World Generation ---
+                // Create Ground/Ballast
+                const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 10, height: trackLength + 20}, scene);
+                ground.material = ballastMaterial;
+                ground.position.z = trackLength / 2 - SLEEPER_SPACING / 2;
+
+                // Create Rails
+                const rail1 = BABYLON.MeshBuilder.CreateBox("rail1", {width: 0.1, height: 0.15, depth: trackLength}, scene);
+                rail1.material = railMaterial;
+                rail1.position = new BABYLON.Vector3(-RAIL_GAUGE / 2, 0.15, trackLength / 2 - SLEEPER_SPACING / 2);
+                const rail2 = rail1.clone("rail2");
+                rail2.position.x = RAIL_GAUGE / 2;
+
+                // Loop to create Sleepers, Liners, and Fasteners
+                for (let i = 0; i < NUM_SLEEPERS; i++) {
+                    const sleeperZ = i * SLEEPER_SPACING;
+                    const sleeperId = `SLPR-${i.toString().padStart(3, '0')}`;
+                    
+                    // Create Sleeper mesh and add it to the assets object
+                    const sleeper = BABYLON.MeshBuilder.CreateBox(sleeperId, {width: 2.5, height: 0.2, depth: 0.25}, scene);
+                    sleeper.position = new BABYLON.Vector3(0, 0, sleeperZ);
+                    sleeper.material = sleeperMaterial;
+                    assets[sleeperId] = { data: { id: sleeperId, type: 'Sleeper', status: 'OK' }, mesh: sleeper };
+
+                    // Create Rail Liner meshes (2 per sleeper) and add them to assets
+                    [-RAIL_GAUGE / 2, RAIL_GAUGE / 2].forEach((posX, j) => {
+                        const linerId = `LNR-${i.toString().padStart(3, '0')}-${j+1}`;
+                        const liner = BABYLON.MeshBuilder.CreateBox(linerId, {width: 0.2, height: 0.02, depth: 0.3}, scene);
+                        liner.material = linerMaterial;
+                        liner.position = new BABYLON.Vector3(posX, 0.11, sleeperZ);
+                        assets[linerId] = { data: { id: linerId, type: 'Rail Liner', status: 'OK' }, mesh: liner };
+                    });
+
+                    // Create Fastener meshes (4 per sleeper) and add them to assets
+                    [-RAIL_GAUGE / 2, -RAIL_GAUGE / 2, RAIL_GAUGE / 2, RAIL_GAUGE / 2].forEach((posX, j) => {
+                        const clipId = `PDC-${i.toString().padStart(3, '0')}-${j+1}`;
+                        const clip = BABYLON.MeshBuilder.CreateBox(clipId, {size: 0.1}, scene);
+                        clip.material = clipMaterial.clone(`${clipId}_mat`); // Clone material to allow individual color changes
+                        clip.position = new BABYLON.Vector3(posX + (j % 2 === 0 ? -0.1 : 0.1), 0.2, sleeperZ);
+                        assets[clipId] = { data: { id: clipId, type: 'Pandrol Clip', status: 'OK' }, mesh: clip };
+                    });
+                }
+                
+                // Create cosmetic OHE Masts for visual variety
+                for (let i = 0; i < NUM_SLEEPERS; i += 25) {
+                    const zPos = i * SLEEPER_SPACING;
+                    const mast = BABYLON.MeshBuilder.CreateCylinder(`ohe_mast_${i}`, {height: 8, diameter: 0.3}, scene);
+                    mast.material = oheMaterial;
+                    mast.position = new BABYLON.Vector3(-4, 4, zPos);
+                    const arm = BABYLON.MeshBuilder.CreateBox(`ohe_arm_${i}`, {width: 4, height: 0.2, depth: 0.2}, scene);
+                    arm.material = oheMaterial;
+                    arm.position = new BABYLON.Vector3(-2, 7, zPos);
+                }
+                
+                loadingOverlay.style.display = 'none'; // Hide loading screen
+                return scene;
+            };
+
+            /**
+             * Renders the defect and alert feeds in the UI based on the current state arrays.
+             */
+            const updateUI = () => {
+                const defectFeed = document.getElementById('defect-feed');
+                const alertFeed = document.getElementById('alert-feed');
+
+                // Update Live Defect Feed
+                if(liveDefects.length === 0) {
+                    defectFeed.innerHTML = `<p class="text-gray-500 text-sm text-center py-4">No active defects detected.</p>`;
+                } else {
+                    defectFeed.innerHTML = liveDefects.map(d => `
+                        <div class="bg-gray-700/50 p-3 rounded-lg border-l-4 border-red-500">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="font-semibold text-sm">${d.defect_type.replace('_', ' ').toUpperCase()}</p>
+                                    <p class="text-xs text-gray-400">Asset ID: ${d.asset_id}</p>
+                                    <p class="text-xs text-gray-400">Time: ${new Date(d.timestamp).toLocaleTimeString()}</p>
+                                </div>
+                                <button onclick="window.focusOnAsset('${d.asset_id}')" class="focus-btn p-1 rounded-full text-gray-400 hover:bg-cyan-600 hover:text-white transition">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+
+                // Update Predictive Alerts Feed
+                if(predictiveAlerts.length === 0) {
+                    alertFeed.innerHTML = `<p class="text-gray-500 text-sm text-center py-4">No predictive alerts generated.</p>`;
+                } else {
+                     alertFeed.innerHTML = predictiveAlerts.map(a => `
+                        <div class="bg-gray-700/50 p-3 rounded-lg border-l-4 border-yellow-500">
+                            <p class="font-semibold text-sm">${a.title}</p>
+                            <p class="text-xs text-gray-400">Asset ID: ${a.asset_id}</p>
+                             <p class="text-xs text-gray-400">${a.reason}</p>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            /**
+             * The core AI logic. Processes a defect report, updates the digital twin, and runs predictive analysis.
+             * @param {object} report - The defect report object.
+             */
+            const processDefectReport = (report) => {
+                const asset = assets[report.asset_id];
+                if (asset) {
+                    // 1. Update Digital Twin State (only if not already marked as defective)
+                    if (asset.data.status === 'OK') {
+                        asset.data.status = 'DEFECTIVE';
+                        const defectMaterial = new BABYLON.StandardMaterial("defectMat" + Math.random(), scene); // Unique material name
+                        defectMaterial.diffuseColor = new BABYLON.Color3.Red();
+                        defectMaterial.emissiveColor = new BABYLON.Color3.FromHexString("#ef4444"); // Make it glow slightly
+                        asset.mesh.material = defectMaterial;
+
+                        // Add to live defects feed (and keep it capped at 10 items)
+                        liveDefects.unshift(report);
+                        if(liveDefects.length > 10) liveDefects.pop();
+                        
+                        // Automatically focus the camera on the newly detected defect
+                        window.focusOnAsset(report.asset_id);
+                    }
+                }
+
+                // 2. Log history for predictive analysis
+                if (!defectHistory[report.asset_id]) defectHistory[report.asset_id] = [];
+                defectHistory[report.asset_id].push(report.timestamp);
+
+                // 3. Run Predictive Logic
+                // If an asset has reached the defect threshold and doesn't already have an alert...
+                if (defectHistory[report.asset_id].length >= PREDICTIVE_THRESHOLD) {
+                    if (!predictiveAlerts.some(a => a.asset_id === report.asset_id)) {
+                        const alert = {
+                            asset_id: report.asset_id,
+                            title: 'High Failure Probability',
+                            reason: `${defectHistory[report.asset_id].length} defects recorded. Inspection advised.`,
+                            timestamp: Date.now()
+                        };
+                        predictiveAlerts.unshift(alert); // Add the new alert to the UI data
+                    }
+                }
+                // 4. Refresh the UI with the latest data
+                updateUI();
+            };
+
+            /**
+             * Simulates the TRC/ITMS clients by generating random defect reports at a set interval.
+             */
+            const startSimulation = () => {
+                const assetIds = Object.keys(assets);
+                setInterval(() => {
+                    // Pick a random asset from the entire track
+                    const randomAssetId = assetIds[Math.floor(Math.random() * assetIds.length)];
+                    let randomDefectType = 'unknown_defect';
+
+                    // Assign a relevant defect type based on the asset type
+                    if (randomAssetId.startsWith('PDC')) {
+                        const defects = ['clip_missing', 'clip_dislodged', 'broken_fastener'];
+                        randomDefectType = defects[Math.floor(Math.random() * defects.length)];
+                    } else if (randomAssetId.startsWith('SLPR')) {
+                        const defects = ['sleeper_crack', 'sleeper_dislodged', 'ballast_fouling'];
+                         randomDefectType = defects[Math.floor(Math.random() * defects.length)];
+                    } else if (randomAssetId.startsWith('LNR')) {
+                        const defects = ['liner_worn', 'liner_missing', 'liner_cracked'];
+                        randomDefectType = defects[Math.floor(Math.random() * defects.length)];
+                    }
+                    
+                    // Create the defect report object
+                    const defectReport = {
+                        asset_id: randomAssetId,
+                        timestamp: Date.now(),
+                        defect_type: randomDefectType
+                    };
+                    
+                    document.getElementById('status-text').textContent = `TRC/ITMS Sim: Packet received...`;
+                    processDefectReport(defectReport); // Send the report to the AI core
+                }, SIMULATION_INTERVAL);
+            };
+
+            // --- Main Execution ---
+            scene = createScene(); // Initialize the scene
+            // Start the Babylon.js render loop
+            engine.runRenderLoop(() => {
+                if(scene && scene.activeCamera) scene.render();
+            });
+            // Handle browser window resizing
+            window.addEventListener('resize', () => engine.resize());
+            startSimulation(); // Start the backend data simulation
+            updateUI(); // Perform an initial UI render
+        });
+    </script>
+</body>
+</html>
+
